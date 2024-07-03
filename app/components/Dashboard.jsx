@@ -100,6 +100,11 @@ const Dashboard = () => {
       router.push('/')
     })
   }
+  const clearNotes = () => {
+    console.log('Clearing notes');
+    setNotes({ title: '', body: '' });
+  };
+
 
   return (
     <Box component="div" className="flex flex-col">
@@ -111,13 +116,19 @@ const Dashboard = () => {
               <IconButton onClick={handleSave}>
                 <IoMdAdd />
               </IconButton>
-              <IconButton onClick={() => setNotes({title: '', body: ''})} >
+              <IconButton onClick={clearNotes} >
                 <TbHttpDelete />
               </IconButton>
               
             </Box>
-            <TextField onChange={(e) => setNotes({...notes, title: e.target.value})}/>
-            <TextField onChange={(e) => setNotes({...notes, body: e.target.value})}/>
+            <TextField 
+              onChange={(e) => setNotes({...notes, title: e.target.value})}
+              value={notes.title}
+              />
+            <TextField 
+              onChange={(e) => setNotes({...notes, body: e.target.value})}
+              value={notes.body}
+              />
           </FormControl>
           <Button variant="contained" onClick={handleLogOut}>Log Out</Button>
         </Box>
