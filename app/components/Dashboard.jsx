@@ -7,7 +7,7 @@ import { MdOutlineEdit } from "react-icons/md";
 import { FaTrashAlt } from "react-icons/fa";
 import { TbHttpDelete } from "react-icons/tb";
 import { IoMdAdd } from "react-icons/io";
-import { addDoc, getDocs, collection, deleteDoc, doc } from "firebase/firestore";
+import { addDoc, getDocs, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../server/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -19,7 +19,7 @@ const Dashboard = () => {
   const [notes, setNotes] = useState({title: '', body: ''})
   const [user, setUser] = useState(null)
   const [noteList, setNoteList] = useState([])
-  const [editSavedNote, setEditSavedNote] = useState(false)
+  const [editSavedNote, setEditSavedNote] = useState(null)
   const router = useRouter();
 
   useEffect(() => {
@@ -64,12 +64,19 @@ const Dashboard = () => {
     }
   }
 
-  const saveEdit = async () => {
+  const saveEdit = async (id, updatedNote) => {
     try {
-      console.log('saving edit');
+      if (user) {
+        const docRef = doc(db, 'user', user.uid, 'notes', id);
+        await updateDoc(docRef, updatedNote);
+        setNoteList(prevNotes => prevNotes.map(note => note.id === id ? { ...note, ...updatedNote } : note));
+        setEditSavedNote(null);
+      } else {
+        console.error('User not logged in');
+      }
     } 
     catch (err) {
-      console.error(err)
+      console.error('Error updating note', err)
     }
   }
 
@@ -114,40 +121,42 @@ const Dashboard = () => {
           </FormControl>
           <Button variant="contained" onClick={handleLogOut}>Log Out</Button>
         </Box>
-        {
-          editSavedNote ? 
-          
-          <Box>
-          <FormControl>
-            <Box component="div" className="flex gap-4">
-              <IconButton onClick={saveEdit}>
-                <FaRegSave onClick={ () => setEditSavedNote(false)} />
-              </IconButton>
-              <IconButton>
-                <TbHttpDelete />
-              </IconButton>
-              
-            </Box>
-            <TextField onChange={(e) => setNotes({...notes, title: e.target.value})}/>
-            <TextField onChange={(e) => setNotes({...notes, body: e.target.value})}/>
-          </FormControl>
-        </Box>
-
-          
-          : 
-
-          noteList.map(data => 
-          <Box>
+        {noteList.map(data => 
+          <Box key={data.id} className="flex flex-col">
             <Box className="flex">
-              <IconButton onClick={() =>  setEditSavedNote(true)}>
+              {editSavedNote === data.id ?
+              <IconButton onClick={() => saveEdit(data.id, { title: data.title, body: data.body })}>
+                <FaRegSave />
+              </IconButton> 
+              :
+              <IconButton onClick={() =>  setEditSavedNote(data.id)}>
                 <MdOutlineEdit/> 
               </IconButton>
+              
+              }
               <IconButton onClick={()=> handleDelete(data.id)}>
                 <FaTrashAlt/> 
               </IconButton>
             </Box>
-            <Box>{data.title}</Box>
-            <Box>{data.body}</Box>
+            {editSavedNote === data.id ? 
+            <>
+              <TextField
+                onChange={(e) => setNoteList(prevNotes => prevNotes.map(note => note.id === data.id ? { ...note, title: e.target.value } : note))}
+                value={data.title}
+                placeholder="Title"
+              />
+              <TextField
+                onChange={(e) => setNoteList(prevNotes => prevNotes.map(note => note.id === data.id ? { ...note, body: e.target.value } : note))}
+                value={data.body}
+                placeholder="Body"
+              />
+            </>
+            :
+            <>
+              <Box>{data.title}</Box>
+              <Box>{data.body}</Box>
+            </>
+            }
           </Box>
           )
         }
