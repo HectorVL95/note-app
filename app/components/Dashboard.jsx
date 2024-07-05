@@ -7,20 +7,28 @@ import { MdOutlineEdit } from "react-icons/md";
 import { FaTrashAlt } from "react-icons/fa";
 import { TbHttpDelete } from "react-icons/tb";
 import { IoMdAdd } from "react-icons/io";
+import { TiDelete } from "react-icons/ti";
 import { addDoc, getDocs, collection, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db, auth } from "../server/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
-
+import { ref, uploadBytes, listAll, list, getDownloadURL, deleteObject } from "firebase/storage";
+import { storage } from "../server/firebase";
+import { v4 } from "uuid";
+import { Darumadrop_One } from "next/font/google";
 
 
 const Dashboard = () => {
   
-  const [notes, setNotes] = useState({title: '', body: ''})
-  const [user, setUser] = useState(null)
-  const [noteList, setNoteList] = useState([])
-  const [editSavedNote, setEditSavedNote] = useState(null)
+  const [notes, setNotes] = useState({title: '', body: ''});
+  const [user, setUser] = useState(null);
+  const [noteList, setNoteList] = useState([]);
+  const [editSavedNote, setEditSavedNote] = useState(null);
+  const [imageUpload, setImageUpload] = useState(null);
+  const [imageUrls, setImageUrls] = useState([]);
   const router = useRouter();
+
+  const imagesListRef = ref(storage, "images/");
 
   useEffect(() => {
     onAuthStateChanged (auth, (user) => {
@@ -31,6 +39,14 @@ const Dashboard = () => {
         setUser(null),
         setNoteList([])
       }
+    })
+
+    list(imagesListRef).then((response) => {
+      response.items.forEach((item) => {
+        getDownloadURL(item).then((url) => {
+          setImageUrls((prev) => [...prev, url]);
+        })
+      })
     })
   }, [])
 
@@ -50,11 +66,20 @@ const Dashboard = () => {
     try {
       if (user) {
         const userNotesCollectionRef = collection(db, 'user', user.uid, 'notes');
-        const docRef = await addDoc(userNotesCollectionRef, notes)
-        const newNote = { id: docRef.id, ...notes}
-        setNoteList(prevNotes => [...prevNotes, newNote]);
+
+        let imageUrl = '';
+        if (imageUpload) {
+          const imageRef = ref(storage, `images/${imageUpload.name + v4()}`);
+          await uploadBytes(imageRef, imageUpload);
+          imageUrl = await getDownloadURL(imageRef);
+        }
+        const newNote = { ...notes, imageUrl};
+        const docRef = await addDoc(userNotesCollectionRef, newNote)
+        setNoteList(prevNotes => [...prevNotes, {id: docRef.id, ...newNote}]);
         setNotes({ title: '', body: ''});
-      } else{
+        setImageUpload(null)
+      } 
+      else{
         console.error('User not logged in')
       }
       
@@ -63,6 +88,27 @@ const Dashboard = () => {
       console.error(err)
     }
   }
+ 
+  const deletePic = async () => {
+    try {
+      if (!user) {
+        console.error('User not logged in');
+        return;
+      }
+
+      if (!imageUpload) {
+        console.error('No image to delete');
+        return;
+      }
+
+      const uploadedImagePath = `images/${imageUpload.name}`;
+      const imageRef = ref(storage, uploadedImagePath);
+      await deleteObject(imageRef);
+      console.log('Deleted Successfully');
+    } catch (err) {
+      console.error('Error deleting image:', err);
+    }
+  };
 
   const saveEdit = async (id, updatedNote) => {
     try {
@@ -129,6 +175,9 @@ const Dashboard = () => {
               onChange={(e) => setNotes({...notes, body: e.target.value})}
               value={notes.body}
               />
+              <input type="file" onChange={(e) => {
+                setImageUpload(e.target.files[0]);
+              }}/>
           </FormControl>
           <Button variant="contained" onClick={handleLogOut}>Log Out</Button>
         </Box>
@@ -161,11 +210,21 @@ const Dashboard = () => {
                 value={data.body}
                 placeholder="Body"
               />
+              {data.imageUrl &&
+              
+              <Box component="div">
+                <IconButton>
+                <TiDelete onClick={deletePic}/>
+                </IconButton>
+                <img src={data.imageUrl} alt="Note Image"/>
+              </Box>
+              }
             </>
             :
             <>
               <Box>{data.title}</Box>
               <Box>{data.body}</Box>
+              {data.imageUrl && <img src={data.imageUrl} alt="Note Image"/>}
             </>
             }
           </Box>
