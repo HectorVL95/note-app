@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Box, Typography, Button, TextField, FormControl, IconButton } from "@mui/material";
 import { FaRegSave } from "react-icons/fa";
 import { MdOutlineEdit } from "react-icons/md";
@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { ref, uploadBytes, list, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "../server/firebase";
 import { v4 } from "uuid";
+import { Input } from "postcss";
 
 const Dashboard = () => {
   
@@ -27,6 +28,7 @@ const Dashboard = () => {
   const router = useRouter();
 
   const imagesListRef = ref(storage, "images/");
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     onAuthStateChanged(auth, (user) => {
@@ -75,6 +77,10 @@ const Dashboard = () => {
         setNoteList(prevNotes => [...prevNotes, { id: docRef.id, ...newNote }]);
         setNotes({ title: '', body: '' });
         setImageUpload(null);
+
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       } else {
         console.error('User not logged in');
       }
@@ -138,6 +144,37 @@ const Dashboard = () => {
     }
   }
 
+  const replacePic = async (id, oldImageUrl, newImage) => {
+    try {
+      if(!user) {
+        console.error('User not logged in')
+      }
+
+      //Delete Old Image
+      const oldImageRef = ref(storage, oldImageUrl);
+      await deleteObject(oldImageRef);
+
+      // Upload the new Image
+      const newImageRef = ref(storage, `images/${newImage.name + v4()}`);
+      await uploadBytes(newImageRef, newImage);
+      const newImageUrl = await getDownloadURL(newImageRef);
+
+      // Update the firestore document with new image URL
+      const docRef = doc(db, 'user', user.uid, 'notes', id);
+      await updateDoc(docRef, { imageUrl: newImageUrl});
+
+      //Update the state
+      setNoteList(prevNotes => prevNotes.map(note => note.id === id ? { ...note, imageUrl: newImageUrl} : note))
+
+
+
+    }
+    catch(error) {
+      console.error('No se pudo replazar imagen', error)
+  } 
+  }
+
+
   const handleLogOut = () => {
     signOut(auth).then(() => {
       router.push('/');
@@ -171,7 +208,7 @@ const Dashboard = () => {
               onChange={(e) => setNotes({ ...notes, body: e.target.value })}
               value={notes.body}
             />
-            <input type="file" onChange={(e) => {
+            <input ref={fileInputRef} type="file" onChange={(e) => {
               setImageUpload(e.target.files[0]);
             }} />
           </FormControl>
@@ -205,6 +242,10 @@ const Dashboard = () => {
                   value={data.body}
                   placeholder="Body"
                 />
+                <input type="file" onChange={(e) => {
+                  const newImage = e.target.files[0];
+                  replacePic(data.id, data.imageUrl, newImage);
+                }}/>
                 {data.imageUrl &&
                   <Box component="div">
                     <>
